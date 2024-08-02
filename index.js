@@ -3,6 +3,7 @@ import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import Graceful from "@ladjs/graceful";
 
 dotenv.config();
 
@@ -92,6 +93,10 @@ app.all("*/api/*", async (req, res) => {
     }
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`Proxy server listening at http://localhost:${port}`);
 });
+
+const graceful = new Graceful({ servers: [server] });
+
+graceful.listen();
