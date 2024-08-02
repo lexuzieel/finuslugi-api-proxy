@@ -22,8 +22,18 @@ app.use(
 
 app.use(express.json());
 
+const normalizeUrl = (url) => {
+    if (url.startsWith(process.env.API_PATH_PREFIX)) {
+        return url.replace(process.env.API_PATH_PREFIX, "")
+    }
+
+    return url
+}
+
 app.post("*/api/*/partnerLogin", async (req, res) => {
-    console.log(req.method, req.url)
+    const url = normalizeUrl(req.url)
+
+    console.log(req.method, url)
 
     const headers = {
         "accept": req.headers["accept"],
@@ -38,7 +48,7 @@ app.post("*/api/*/partnerLogin", async (req, res) => {
 
         const response = await axios({
             method: req.method,
-            url: apiEndpoint + req.url,
+            url: apiEndpoint + url,
             headers,
             data: {
                 ...req.body,
@@ -61,7 +71,9 @@ app.post("*/api/*/partnerLogin", async (req, res) => {
 });
 
 app.all("*/api/*", async (req, res) => {
-    console.log(req.method, req.url)
+    const url = normalizeUrl(req.url)
+
+    console.log(req.method, url)
 
     if (req.method != "GET" && req.method != "POST") {
         res.status(405).send({ error: "Method not allowed" })
@@ -76,7 +88,7 @@ app.all("*/api/*", async (req, res) => {
     try {
         const response = await axios({
             method: req.method,
-            url: apiEndpoint + req.url,
+            url: apiEndpoint + url,
             headers,
             data: req.method == "POST" ? req.body : undefined,
         });
