@@ -1,0 +1,16 @@
+services:
+    proxy:
+        build:
+            context: .
+        networks:
+            - traefik
+            - default
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.services.finuslugi-api-proxy.loadbalancer.server.port=3000"
+            - "traefik.http.routers.finuslugi-api-proxy.rule=PathPrefix(`/api-proxy/`)"
+            - "traefik.http.routers.finuslugi-api-proxy.entrypoints=web"
+            - "traefik.docker.network=traefik_overlay"
+networks:
+    traefik:
+        name: traefik_overlay
