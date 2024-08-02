@@ -2,6 +2,7 @@ services:
     proxy:
         build:
             context: .
+        restart: unless-stopped
         networks:
             - traefik
             - default
