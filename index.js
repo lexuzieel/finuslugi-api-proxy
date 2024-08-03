@@ -14,11 +14,23 @@ const port = process.env.PORT || 3000;
 const apiEndpoint = "https://finuslugi.ru";
 
 // Use CORS middleware
-app.use(
-    cors({
-        origin: 'http://project9253441.tilda.ws',
-    }),
-);
+app.use((req, res, next) => {
+    const origin = req.get('origin');
+
+    const allowedOrigins = process.env.API_CORS_DOMAINS?.split(',') || [
+        'http://localhost',
+    ];
+
+    if (!allowedOrigins.includes(origin)) {
+        console.warn(`Request from origin ${origin} not allowed`)
+        res.sendStatus(403)
+        return
+    }
+
+    return cors({
+        origin,
+    })(req, res, next);
+});
 
 app.use(express.json());
 
