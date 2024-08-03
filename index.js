@@ -22,6 +22,19 @@ app.use(
 
 app.use(express.json());
 
+const authorizeRequest = (req, res, next) => {
+    const apiKey = process.env.API_KEY || ''
+    const key = req.headers['x-api-key'] || ''
+
+    if (apiKey.length > 0 && apiKey != key) {
+        res.sendStatus(401)
+    } else {
+        next()
+    }
+}
+
+app.use(authorizeRequest);
+
 const normalizeUrl = (url) => {
     if (url.startsWith(process.env.API_PATH_PREFIX)) {
         return url.replace(process.env.API_PATH_PREFIX, "")
