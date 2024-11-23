@@ -1,7 +1,6 @@
 import _ from "lodash";
 import GoogleSheetsProvider from "./providers/googleSheets.js";
-import { JWT } from "google-auth-library";
-import { transliterate, findBankMapping } from "./utils/transliterate.js";
+import { findBankMapping, findCompanyMapping } from "./utils/transliterate.js";
 
 // Base class for response augmentation
 class ResponseAugmenter {
@@ -42,7 +41,7 @@ class BankListAugmenter extends ResponseAugmenter {
 
         console.debug("Mapped banks:", mappedBanks);
 
-        // Merge original bank list with mapped banks
+        // Keep only new bank ids
         const newBanks = mappedBanks.filter(
             (mappedBank) =>
                 !originalBanks.some(
@@ -62,7 +61,42 @@ class CompanyListAugmenter extends ResponseAugmenter {
 
     async augment(data) {
         console.log("Augmenting company list");
-        return data;
+
+        const originalCompanies = (data || []).map((company) => {
+            company.extra = false;
+            return company;
+        });
+
+        const doc = await GoogleSheetsProvider.getInstance().getDocument();
+
+        const companyNamesPromises = doc.sheetsByIndex.map(async (s) => {
+            await s.loadHeaderRow();
+            return s.headerValues.slice(1);
+        });
+
+        const companyNames = await Promise.all(companyNamesPromises).then(
+            (res) => [...new Set(res.flat())]
+        );
+
+        console.debug("Company names:", companyNames);
+
+        const mappedCompanyNames = companyNames.map((companyName) => ({
+            id: findCompanyMapping(companyName),
+            name: companyName,
+            extra: true,
+        }));
+
+        console.debug("Mapped companies:", mappedCompanyNames);
+
+        // Keep only new company ids
+        const newCompanies = mappedCompanyNames.filter(
+            (mappedCompany) =>
+                !originalCompanies.some(
+                    (originalCompany) => originalCompany.id === mappedCompany.id
+                )
+        );
+
+        return [...newCompanies, ...originalCompanies];
     }
 }
 
