@@ -17,9 +17,12 @@ const apiEndpoint = "https://finuslugi.ru";
 app.use((req, res, next) => {
     const origin = req.get("origin");
 
-    const allowedOrigins = process.env.API_CORS_DOMAINS?.split(",") || [
-        "http://localhost",
-    ];
+    const allowedOrigins = process.env.API_CORS_DOMAINS?.split(",") || [];
+
+    if (allowedOrigins.length == 0) {
+        // Skip CORS when no origins are allowed
+        return next();
+    }
 
     if (!allowedOrigins.includes(origin)) {
         console.warn(`Request from origin ${origin} not allowed`);
