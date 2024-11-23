@@ -4,6 +4,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import Graceful from "@ladjs/graceful";
+import responseAugmenter from "./responseAugmenters.js";
 
 dotenv.config();
 
@@ -99,6 +100,10 @@ app.post("*/api/*/partnerLogin", async (req, res) => {
     }
 });
 
+const augmentResponse = async (req, data) => {
+    return await responseAugmenter.augmentResponse(req, data);
+};
+
 app.all("*/api/*", async (req, res) => {
     const url = normalizeUrl(req.url);
 
@@ -122,7 +127,9 @@ app.all("*/api/*", async (req, res) => {
             data: req.method == "POST" ? req.body : undefined,
         });
 
-        res.send(response.data);
+        const enrichedResponse = await augmentResponse(req, response.data);
+
+        res.send(enrichedResponse);
     } catch (e) {
         if (e.response) {
             const response = e.response;
@@ -141,3 +148,4 @@ const server = app.listen(port, () => {
 const graceful = new Graceful({ servers: [server] });
 
 graceful.listen();
+
