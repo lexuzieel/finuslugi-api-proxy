@@ -102,10 +102,6 @@ app.post("*/api/*/partnerLogin", async (req, res) => {
     }
 });
 
-const augmentResponse = async (req, data) => {
-    return await responseAugmenter.augmentResponse(req, data);
-};
-
 app.all("*/api/*", async (req, res) => {
     const url = normalizeUrl(req.url);
 
@@ -122,16 +118,19 @@ app.all("*/api/*", async (req, res) => {
     };
 
     try {
-        const response = await axios({
+        const axiosPromise = axios({
             method: req.method,
             url: apiEndpoint + url,
             headers,
             data: req.method == "POST" ? req.body : undefined,
         });
 
-        const enrichedResponse = await augmentResponse(req, response.data);
+        const augmentedResponse = await responseAugmenter.augmentResponse(
+            req,
+            axiosPromise
+        );
 
-        res.send(enrichedResponse);
+        res.send(augmentedResponse);
     } catch (e) {
         if (e.response) {
             const response = e.response;
