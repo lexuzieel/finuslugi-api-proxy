@@ -22,7 +22,9 @@ app.use((req, res, next) => {
 
     if (allowedOrigins.length == 0) {
         // Skip CORS when no origins are allowed
-        return next();
+        return cors({
+            origin: "*",
+        })(req, res, next);
     }
 
     if (!allowedOrigins.includes(origin)) {
