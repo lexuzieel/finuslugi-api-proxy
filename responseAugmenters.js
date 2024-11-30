@@ -263,7 +263,7 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                                 break;
 
                             case type.startsWith("жизнь"):
-                                currentLifeGender = type.includes("М")
+                                currentLifeGender = type.includes("м")
                                     ? "male"
                                     : "female";
                                 if (!acc["life"]) acc["life"] = [];
