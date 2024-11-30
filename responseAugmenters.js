@@ -1,7 +1,27 @@
 import _ from "lodash";
 import GoogleSheetsProvider from "./providers/googleSheets.js";
 import { findBankMapping, findCompanyMapping } from "./utils/transliterate.js";
-import axios from "axios";
+import crypto from "crypto";
+import Keyv from "keyv";
+import KeyvFile from "keyv-file";
+import ms from "ms";
+
+const keyv = new Keyv({
+    store: new KeyvFile.KeyvFile({ filename: "storage/cache.json" }),
+});
+
+// Helper function to get TTL with jitter to avoid cache stampede
+const getJitteredTTL = (baseInterval, jitterMinutes = 1) => {
+    return ms(baseInterval) + Math.round(Math.random() * jitterMinutes * 60000);
+};
+
+// Helper function to create cache key
+const createCacheKey = (prefix, params = {}) => {
+    return crypto
+        .createHash("sha1")
+        .update(prefix + JSON.stringify(params))
+        .digest("hex");
+};
 
 // Base class for response augmentation
 class ResponseAugmenter {
@@ -28,6 +48,12 @@ class BankListAugmenter extends ResponseAugmenter {
 
     async augment(req, data) {
         console.debug("Augmenting bank list");
+
+        const cacheKey = createCacheKey("banks");
+        const cached = await keyv.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
 
         const doc = await GoogleSheetsProvider.getInstance().getDocument();
 
@@ -56,7 +82,15 @@ class BankListAugmenter extends ResponseAugmenter {
                 )
         );
 
-        return [...newBanks, ...originalBanks];
+        const result = [...newBanks, ...originalBanks];
+
+        // Cache the result
+        const ttl = getJitteredTTL(
+            process.env.GOOGLE_SHEETS_CACHE_INTERVAL || "1h"
+        );
+        await keyv.set(cacheKey, result, ttl);
+
+        return result;
     }
 }
 
@@ -68,6 +102,12 @@ class CompanyListAugmenter extends ResponseAugmenter {
 
     async augment(req, data) {
         console.log("Augmenting company list");
+
+        const cacheKey = createCacheKey("companies");
+        const cached = await keyv.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
 
         const originalCompanies = (data || []).map((company) => {
             company.extra = false;
@@ -103,7 +143,15 @@ class CompanyListAugmenter extends ResponseAugmenter {
                 )
         );
 
-        return [...newCompanies, ...originalCompanies];
+        const result = [...newCompanies, ...originalCompanies];
+
+        // Cache the result
+        const ttl = getJitteredTTL(
+            process.env.GOOGLE_SHEETS_CACHE_INTERVAL || "1h"
+        );
+        await keyv.set(cacheKey, result, ttl);
+
+        return result;
     }
 }
 
@@ -116,193 +164,206 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
     async augment(req, data) {
         console.log("Augmenting preCalcPolicyPrice response");
 
-        return { ...data, tildaExtra: [{ ...data, isExtra: true }] };
-
-        // Process API response data if exists
-        const apiResults =
-            data && data.length
-                ? data.map((item) => ({
-                      ...item,
-                      bankId: findBankMapping(item.bankName),
-                      companyId: findCompanyMapping(item.insuranceCompanyName),
-                      isActual: true,
-                      source: "api",
-                  }))
-                : [];
-
-        // Get data from Google Sheets
-        const sheetResults = await this.getSheetResults();
-
-        // Merge results
-        const allResults = [...apiResults, ...sheetResults];
-
-        console.debug("Augmented preCalcPolicyPrice data:", allResults);
-        return allResults;
+        return { ...data, tildaExtra: await this.fetchExtra(req) };
     }
 
-    async getSheetResults(params) {
-        try {
-            const doc = await GoogleSheetsProvider.getInstance().getDocument();
-            const sheets = doc.sheetsByIndex;
-            const results = [];
+    async fetchColumn(params) {
+        const cacheKey = createCacheKey("column", {
+            bankId: params.bankId,
+            companyId: params.companyId,
+        });
 
-            // return results;
+        let results = await keyv.get(cacheKey);
+        if (results) {
+            return results;
+        }
 
-            for (const sheet of sheets) {
-                const bankName = sheet.title;
-                const bankId = findBankMapping(bankName);
+        results = [];
 
-                if (params.bankId && bankId !== params.bankId) {
+        const doc = await GoogleSheetsProvider.getInstance().getDocument();
+        const sheets = doc.sheetsByIndex;
+
+        for (const sheet of sheets) {
+            const bankName = sheet.title;
+            const bankId = findBankMapping(bankName);
+
+            if (params.bankId && bankId !== params.bankId) {
+                continue;
+            }
+
+            // Load header row to get company names
+            await sheet.loadHeaderRow();
+            const companyNames = sheet.headerValues.slice(1); // Skip first column
+
+            for (const companyName of companyNames) {
+                const companyId = findCompanyMapping(companyName);
+
+                if (params.companyId && companyId !== params.companyId) {
                     continue;
                 }
 
-                // Load header row to get company names
-                await sheet.loadHeaderRow();
-                const companyNames = sheet.headerValues.slice(1); // Skip first column
+                // get column for company name from bank sheet
+                const columnIndex = sheet.headerValues.findIndex(
+                    (header) => header === companyName
+                );
+                if (columnIndex === -1) continue;
 
-                for (const companyName of companyNames) {
-                    const companyId = findCompanyMapping(companyName);
+                // Get all rows for this company's column
+                const rows = await sheet.getRows();
 
-                    if (params.companyId && companyId !== params.companyId) {
-                        continue;
+                const addEntry = (acc, type, data) => {
+                    if (!acc[type]) {
+                        acc[type] = [];
                     }
 
-                    // get column for company name from bank sheet
-                    const columnIndex = sheet.headerValues.findIndex(
-                        (header) => header === companyName
-                    );
-                    if (columnIndex === -1) continue;
+                    acc[type].push({ type, ...data });
+                };
 
-                    // Get all rows for this company's column
-                    const rows = await sheet.getRows();
+                const createEntry = (value, extraFields = {}) => ({
+                    value: parseFloat(value),
+                    ...extraFields,
+                });
 
-                    const addEntry = (acc, type, data) => {
-                        if (!acc[type]) {
-                            acc[type] = [];
-                        }
+                const getPropertyType = (type) => {
+                    switch (true) {
+                        case "дом (дерево)":
+                        case "дом (кирпич)":
+                            return "house";
+                        case "комната":
+                            return "room";
+                        case "апартаменты":
+                            return "apartments";
+                        case "машино-место":
+                            return "parkingSpace";
+                        default:
+                            return "flat";
+                    }
+                };
 
-                        acc[type].push(data);
-                    };
+                const handleProperty = (acc, type, value) => {
+                    const propertyType = getPropertyType(type);
+                    const extraFields = { propertyType };
 
-                    const createEntry = (type, value, extraFields = {}) => ({
-                        type,
-                        price: parseFloat(value),
-                        ...extraFields,
-                    });
+                    if (propertyType === "house") {
+                        extraFields.propertyWoodenFloor =
+                            type === "дом (дерево)";
+                    }
 
-                    const getPropertyType = (type) => {
-                        switch (type) {
-                            case "дом (дерево)":
-                            case "дом (кирпич)":
-                                return "house";
-                            case "комната":
-                                return "room";
-                            case "апартаменты":
-                                return "apartments";
-                            case "машино-место":
-                                return "parkingSpace";
-                            default:
-                                return "flat";
-                        }
-                    };
+                    if (value) {
+                        addEntry(
+                            acc,
+                            "property",
+                            createEntry(value, extraFields)
+                        );
+                    }
+                };
 
-                    const handleProperty = (acc, type, value, params) => {
-                        const propertyType = getPropertyType(type);
-                        const extraFields = {};
+                const handleTitle = (acc, value) => {
+                    if (value) {
+                        addEntry(acc, "title", createEntry(value));
+                    }
+                };
 
-                        if (propertyType === "house") {
-                            extraFields.propertyWoodenFloor =
-                                type === "дом (дерево)";
-                        }
+                const handleLife = (acc, value, gender, age) => {
+                    if (value) {
+                        addEntry(
+                            acc,
+                            "life",
+                            createEntry(value, { gender, age })
+                        );
+                    }
+                };
 
-                        if (
-                            !params.propertyType ||
-                            params.propertyType === propertyType
-                        ) {
-                            if (value) {
-                                addEntry(
-                                    acc,
-                                    propertyType,
-                                    createEntry(
-                                        propertyType,
-                                        value,
-                                        extraFields
-                                    )
-                                );
-                            }
-                        }
-                    };
+                // Process rows
+                let currentLifeGender = null;
+                const rowsByType = rows.reduce((acc, row) => {
+                    const type = (row._rawData[0] || "").toLowerCase().trim();
+                    if (!type) return acc;
 
-                    const handleTitle = (acc, value) => {
-                        if (value) {
-                            addEntry(acc, "title", createEntry("title", value));
-                        }
-                    };
+                    const value = row._rawData[columnIndex];
 
-                    const handleLife = (acc, value, gender, age) => {
-                        if (value) {
-                            addEntry(
+                    switch (true) {
+                        case type === "титул":
+                            handleTitle(acc, value);
+                            break;
+
+                        case type.startsWith("жизнь"):
+                            currentLifeGender = type.includes("м")
+                                ? "male"
+                                : "female";
+                            if (!acc["life"]) acc["life"] = [];
+                            break;
+
+                        case currentLifeGender && !isNaN(parseInt(type)):
+                            handleLife(
                                 acc,
-                                "life",
-                                createEntry("life", value, { gender, age })
+                                value,
+                                currentLifeGender,
+                                parseInt(type)
                             );
-                        }
-                    };
+                            break;
 
-                    // Process rows
-                    let currentLifeGender = null;
-                    const rowsByType = rows.reduce((acc, row) => {
-                        const type = row._rawData[0].toLowerCase().trim();
-                        if (!type) return acc;
+                        default:
+                            currentLifeGender = null;
+                            handleProperty(acc, type, value);
+                    }
 
-                        const value = row._rawData[columnIndex];
+                    return acc;
+                }, {});
 
-                        switch (true) {
-                            case type === "титул":
-                                handleTitle(acc, value);
-                                break;
-
-                            case type.startsWith("жизнь"):
-                                currentLifeGender = type.includes("м")
-                                    ? "male"
-                                    : "female";
-                                if (!acc["life"]) acc["life"] = [];
-                                break;
-
-                            case currentLifeGender && !isNaN(parseInt(type)):
-                                handleLife(
-                                    acc,
-                                    value,
-                                    currentLifeGender,
-                                    parseInt(type)
-                                );
-                                break;
-
-                            default:
-                                currentLifeGender = null;
-                                handleProperty(acc, type, value, params);
-                        }
-
-                        return acc;
-                    }, {});
-
-                    // Flatten and add results
-                    results.push(
-                        ...Object.values(rowsByType)
-                            .flat()
-                            .map((entry) => ({
-                                bankId,
-                                companyId,
-                                ...entry,
-                            }))
-                    );
-                }
+                // Flatten and add results
+                results.push(
+                    ...Object.values(rowsByType)
+                        .flat()
+                        .map((entry) => ({
+                            bankId,
+                            companyId,
+                            ...entry,
+                        }))
+                );
             }
+        }
+        const ttl = getJitteredTTL(
+            process.env.GOOGLE_SHEETS_CACHE_INTERVAL || "1h"
+        );
+        await keyv.set(cacheKey, results, ttl);
 
-            return results;
+        return results;
+    }
+
+    async resolvePrice(params) {
+        try {
+            const column = await this.fetchColumn(params);
+
+            const aggregate = column.filter((r) => {
+                switch (true) {
+                    case params.insuranceProperty && r.type === "property":
+                        let predicate = r.propertyType === params.propertyType;
+
+                        if (params.propertyType == "house") {
+                            predicate =
+                                predicate &&
+                                r.propertyWoodenFloor ===
+                                    params.propertyWoodenFloor;
+                        }
+
+                        return predicate;
+                    case params.insuranceLife && r.type === "life":
+                        return r.gender === params.sex && r.age === params.age;
+                    case params.insuranceTitle && r.type === "title":
+                        return true;
+                    default:
+                        return false;
+                }
+            });
+
+            return (
+                params.creditSum *
+                aggregate.reduce((acc, r) => acc + r.value, 0)
+            );
         } catch (error) {
-            console.error("Error getting sheet results:", error);
-            return [];
+            // console.error("Error getting sheet results:", error);
+            return 0;
         }
     }
 
@@ -310,36 +371,50 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
         const bankId = req.body.bankCode || "";
         const companyId = req.url.split("/").pop();
 
-        const sheetResults = await this.getSheetResults({
+        const params = {
             bankId,
             companyId,
-            ...req.body,
-        });
+            creditSum: req.body.form?.creditSum || 0,
+            insuranceLife: req.body.insuranceLife == true,
+            insuranceProperty: req.body.insuranceProperty == true,
+            insuranceTitle: req.body.insuranceTitle == true,
+            sex: (req.body.form?.sex || "").toLowerCase(),
+            age: req.body.form?.age,
+            propertyType: (req.body.form?.propertyType || "").toLowerCase(),
+            propertyWoodenFloor: req.body.form?.propertyWoodenFloor == true,
+        };
 
-        console.log(
-            sheetResults
-            // sheetResults.filter(
-            //     (r) =>
-            //         r.bankId.toLowerCase() === bankId.toLowerCase() &&
-            //         r.companyId.toLowerCase() === companyId.toLowerCase()
-            // )
-        );
+        const total = await this.resolvePrice(params);
+
+        if (total == 0) {
+            return [];
+        }
 
         return [
             {
                 companyId,
-                total: 0.1,
-                // lifeInsuranceCreditSum: 541256,
-                // calcId: "b3f910ce-15f1-4eed-918c-da3800f7b62f",
-                // partnerKv: 235.17,
-                // partnerId: 65738,
+                total,
             },
         ];
     }
 
     async handleError(req, error) {
+        // console.log(error.response.status)
         if (error.response?.status === 400) {
-            console.log("Handling 400 error for preCalcPolicyPrice");
+            // console.log("Handling 400 error for preCalcPolicyPrice");
+
+            // Make deep copy without mutating original message array
+            const message = JSON.parse(
+                JSON.stringify(error.response.data?.errorMessages || [])
+            ).pop();
+
+            if (
+                (message || "").includes(
+                    "не поддерживает комплексное страхование жизни и имущества для указанного банка"
+                )
+            ) {
+                throw error;
+            }
 
             return {
                 tildaExtra: await this.fetchExtra(req),
@@ -350,7 +425,6 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
     }
 }
 
-// Response augmentation manager
 class ResponseAugmentationManager {
     constructor() {
         this.augmenters = [
