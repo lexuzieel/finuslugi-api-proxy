@@ -66,11 +66,13 @@ class BankListAugmenter extends ResponseAugmenter {
         // Get sheet names
         const sheetNames = doc.sheetsByIndex.map((s) => s.title);
 
-        const mappedBanks = sheetNames.map((sheetName) => ({
-            id: findBankMapping(sheetName),
-            name: sheetName,
-            extra: true,
-        }));
+        const mappedBanks = sheetNames
+            .filter((name) => !name.startsWith("-"))
+            .map((name) => ({
+                id: findBankMapping(name),
+                name,
+                extra: true,
+            }));
 
         console.debug("Mapped banks:", mappedBanks);
 
@@ -118,7 +120,9 @@ class CompanyListAugmenter extends ResponseAugmenter {
 
         const companyNamesPromises = doc.sheetsByIndex.map(async (s) => {
             await s.loadHeaderRow();
-            return s.headerValues.slice(1);
+            return s.headerValues
+                .slice(1)
+                .filter((name) => !name.startsWith("-"));
         });
 
         const companyNames = await Promise.all(companyNamesPromises).then(
