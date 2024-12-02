@@ -224,7 +224,7 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 };
 
                 const createEntry = (value, extraFields = {}) => ({
-                    value: parseFloat(value),
+                    value: parseFloat(value.replace(",", ".")),
                     ...extraFields,
                 });
 
