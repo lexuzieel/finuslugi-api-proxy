@@ -6,8 +6,7 @@ export const companyNameMappings = {
     Пульс: "puls",
     "Индивидуальная заявка": "nonsegment",
     ПАРИ: "skpari",
-    // "Абсолют Страхование": "absolut",
-    "Абсолют Cтрахование": "absolutv2",
+    "Абсолют Страхование": "absolutv2",
     "Совкомбанк Страхование": "sovcomins",
     Югория: "yugoria",
     Росгосстрах: "rgs",
@@ -16,4 +15,3 @@ export const companyNameMappings = {
     Согласие: "soglasie",
     ЭНЕРГОГАРАНТ: "energogarant",
 };
-
