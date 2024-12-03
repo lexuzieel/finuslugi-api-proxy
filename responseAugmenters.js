@@ -11,7 +11,7 @@ const keyv = new Keyv({
 });
 
 // Helper function to get TTL with jitter to avoid cache stampede
-const getJitteredTTL = (baseInterval, jitterMinutes = 1) => {
+const getJitteredTTL = (baseInterval, jitterMinutes = 0) => {
     return ms(baseInterval) + Math.round(Math.random() * jitterMinutes * 60000);
 };
 
@@ -229,7 +229,7 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 });
 
                 const getPropertyType = (type) => {
-                    switch (true) {
+                    switch (type) {
                         case "дом (дерево)":
                         case "дом (кирпич)":
                             return "house";
@@ -459,4 +459,3 @@ class ResponseAugmentationManager {
 }
 
 export default new ResponseAugmentationManager();
-
