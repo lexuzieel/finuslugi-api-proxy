@@ -244,6 +244,18 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                     }
                 };
 
+                const getKvType = (type) => {
+                    if (type.startsWith("кв")) {
+                        if (type.includes("имущество")) {
+                            return "property";
+                        } else if (type.includes("титул")) {
+                            return "title";
+                        } else if (type.includes("жизнь")) {
+                            return "life";
+                        }
+                    }
+                };
+
                 const handleProperty = (acc, type, value) => {
                     const propertyType = getPropertyType(type);
                     const extraFields = { propertyType };
@@ -278,6 +290,16 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                     }
                 };
 
+                const handleKv = (acc, type, value) => {
+                    if (value) {
+                        addEntry(
+                            acc,
+                            "kv",
+                            createEntry(value, { kvType: getKvType(type) })
+                        );
+                    }
+                };
+
                 // Process rows
                 let currentLifeGender = null;
                 const rowsByType = rows.reduce((acc, row) => {
@@ -296,6 +318,10 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                                 ? "male"
                                 : "female";
                             if (!acc["life"]) acc["life"] = [];
+                            break;
+
+                        case type.startsWith("кв "):
+                            handleKv(acc, type, value);
                             break;
 
                         case currentLifeGender && !isNaN(parseInt(type)):
@@ -361,10 +387,33 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 }
             });
 
-            return (
-                params.creditSum *
-                aggregate.reduce((acc, r) => acc + r.value, 0)
+            const kvTypes = {
+                insuranceProperty: "property",
+                insuranceTitle: "title",
+                insuranceLife: "life",
+            };
+
+            const kv = Object.entries(kvTypes).reduce(
+                (acc, [param, kvType]) => {
+                    if (params[param]) {
+                        return (
+                            acc +
+                            (column.find(
+                                (r) => r.type === "kv" && r.kvType === kvType
+                            )?.value || 0)
+                        );
+                    }
+                    return acc;
+                },
+                0
             );
+
+            return {
+                total:
+                    params.creditSum *
+                    aggregate.reduce((acc, r) => acc + r.value, 0),
+                partnerKv: params.creditSum * kv,
+            };
         } catch (error) {
             // console.error("Error getting sheet results:", error);
             return 0;
@@ -388,18 +437,17 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
             propertyWoodenFloor: req.body.form?.propertyWoodenFloor == true,
         };
 
-        const total = await this.resolvePrice(params);
+        const { total, partnerKv } = await this.resolvePrice(params);
 
         if (total == 0) {
-            return [];
+            return {};
         }
 
-        return [
-            {
-                companyId,
-                total,
-            },
-        ];
+        return {
+            companyId,
+            total,
+            partnerKv,
+        };
     }
 
     async handleError(req, error) {
