@@ -168,6 +168,15 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
     async augment(req, data) {
         console.log("Augmenting preCalcPolicyPrice response");
 
+        // Use FINUSLUGI_KV_THRESHOLD env variable to set kv threshold
+        if (
+            process.env.FINUSLUGI_KV_THRESHOLD &&
+            data.total >= parseInt(process.env.FINUSLUGI_KV_THRESHOLD || 0)
+        ) {
+            data.partnerKv += parseInt(process.env.FINUSLUGI_KV_VALUE || 0);
+            data.partnerKvBonus = true;
+        }
+
         return { ...data, tildaExtra: await this.fetchExtra(req) };
     }
 
