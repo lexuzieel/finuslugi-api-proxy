@@ -413,11 +413,13 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 0
             );
 
+            const total =
+                params.creditSum *
+                aggregate.reduce((acc, r) => acc + r.value, 0);
+
             return {
-                total:
-                    params.creditSum *
-                    aggregate.reduce((acc, r) => acc + r.value, 0),
-                partnerKv: params.creditSum * kv,
+                total,
+                partnerKv: kv * total,
             };
         } catch (error) {
             // console.error("Error getting sheet results:", error);
