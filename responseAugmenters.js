@@ -392,24 +392,12 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 }
             });
 
-            const kvTypes = {
-                insuranceProperty: "property",
-                insuranceTitle: "title",
-                insuranceLife: "life",
-            };
-
-            const kv = Object.entries(kvTypes).reduce(
-                (acc, [param, kvType]) => {
-                    if (params[param]) {
-                        return (
-                            acc +
-                            (column.find(
-                                (r) => r.type === "kv" && r.kvType === kvType
-                            )?.value || 0)
-                        );
-                    }
-                    return acc;
-                },
+            const kv = _.get(
+                _.minBy(
+                    column.filter((r) => r.type === "kv"),
+                    "value"
+                ),
+                "value",
                 0
             );
 
