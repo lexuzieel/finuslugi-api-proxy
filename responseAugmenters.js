@@ -417,9 +417,15 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 params.creditSum *
                 aggregate.reduce((acc, r) => acc + r.value, 0);
 
+            let partnerKv = kv * total;
+
+            if (total >= 3000) {
+                partnerKv += 1000;
+            }
+
             return {
                 total,
-                partnerKv: kv * total,
+                partnerKv,
             };
         } catch (error) {
             // console.error("Error getting sheet results:", error);
