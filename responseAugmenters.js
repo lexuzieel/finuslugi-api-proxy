@@ -419,9 +419,9 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
 
             let partnerKv = kv * total;
 
-            if (total >= 3000) {
-                partnerKv += 1000;
-            }
+            // if (total >= 3000) {
+            //     partnerKv += 1000;
+            // }
 
             return {
                 total,
