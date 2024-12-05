@@ -188,6 +188,11 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
         const sheets = doc.sheetsByIndex;
 
         for (const sheet of sheets) {
+            // Spread google API requests to avoid throttling
+            await new Promise((resolve) =>
+                setTimeout(resolve, 500 + Math.random() * 2500)
+            );
+
             const bankName = sheet.title;
             const bankId = findBankMapping(bankName);
 
