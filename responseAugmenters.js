@@ -84,7 +84,7 @@ class BankListAugmenter extends ResponseAugmenter {
                 )
         );
 
-        const result = [...newBanks, ...originalBanks];
+        const result = [...originalBanks, ...newBanks];
 
         // Cache the result
         const ttl = getJitteredTTL(
