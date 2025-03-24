@@ -108,7 +108,7 @@ class CompanyListAugmenter extends ResponseAugmenter {
         const cacheKey = createCacheKey("companies");
         const cached = await keyv.get(cacheKey);
         if (cached) {
-            console.log("Company list cache hit");
+            console.debug("Company list cache hit");
             return cached;
         }
 
@@ -117,11 +117,15 @@ class CompanyListAugmenter extends ResponseAugmenter {
             return company;
         });
 
-        console.log("Loading company list from google sheets...");
+        console.debug("Loading company list from google sheets...");
 
         const doc = await GoogleSheetsProvider.getInstance().getDocument();
 
-        console.log("Company list loaded");
+        console.debug(
+            "Company list document loaded:",
+            doc.sheetsByIndex.length,
+            "sheets"
+        );
 
         const companyNamesPromises = doc.sheetsByIndex.map(async (s) => {
             await s.loadHeaderRow();
@@ -393,7 +397,7 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                             predicate =
                                 predicate &&
                                 r.propertyWoodenFloor ===
-                                    params.propertyWoodenFloor;
+                                params.propertyWoodenFloor;
                         }
 
                         return predicate;
