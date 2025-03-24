@@ -127,13 +127,13 @@ class CompanyListAugmenter extends ResponseAugmenter {
             "sheets"
         );
 
-        const companyNamesPromises = []
+        let companyNames = []
 
         for (const sheet of doc.sheetsByIndex) {
             try {
                 await sheet.loadHeaderRow();
                 console.debug("Sheet loaded:", sheet.title);
-                companyNamesPromises.push(
+                companyNames.push(
                     sheet.headerValues
                         .slice(1)
                         .filter((name) => !name.startsWith("-"))
@@ -143,15 +143,17 @@ class CompanyListAugmenter extends ResponseAugmenter {
             }
         }
 
-        console.debug("Company names promises:", companyNamesPromises);
+        companyNames = [...new Set(companyNames)];
 
-        return originalCompanies;
+        // console.debug("Company names promises:", companyNamesPromises);
 
-        const companyNames = await Promise.all(companyNamesPromises).then(
-            (res) => [...new Set(res.flat())]
-        );
+        // const companyNames = await Promise.all(companyNamesPromises).then(
+        //     (res) => [...new Set(res.flat())]
+        // );
 
         console.debug("Company names:", companyNames);
+
+        return originalCompanies;
 
         const mappedCompanyNames = companyNames.map((companyName) => ({
             id: findCompanyMapping(companyName),
