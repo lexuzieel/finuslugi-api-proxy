@@ -127,13 +127,21 @@ class CompanyListAugmenter extends ResponseAugmenter {
             "sheets"
         );
 
-        const companyNamesPromises = doc.sheetsByIndex.map(async (s) => {
-            await s.loadHeaderRow();
-            console.debug("Sheet loaded:", s.title);
-            return s.headerValues
-                .slice(1)
-                .filter((name) => !name.startsWith("-"));
-        });
+        const companyNamesPromises = []
+
+        for (const sheet of doc.sheetsByIndex) {
+            try {
+                await sheet.loadHeaderRow();
+                console.debug("Sheet loaded:", sheet.title);
+                companyNamesPromises.push(
+                    sheet.headerValues
+                        .slice(1)
+                        .filter((name) => !name.startsWith("-"))
+                );
+            } catch (error) {
+                console.error("Error loading sheet:", sheet.title, error);
+            }
+        }
 
         console.debug("Company names promises:", companyNamesPromises);
 
