@@ -137,6 +137,8 @@ class CompanyListAugmenter extends ResponseAugmenter {
 
         console.debug("Company names promises:", companyNamesPromises);
 
+        return originalCompanies;
+
         const companyNames = await Promise.all(companyNamesPromises).then(
             (res) => [...new Set(res.flat())]
         );
