@@ -144,7 +144,7 @@ class CompanyListAugmenter extends ResponseAugmenter {
         }
 
         // Flatten and remove duplicates
-        companyNames = [...new Set(companyNames)].flat();
+        companyNames = [...new Set(companyNames.flat())];
 
         console.debug("Company names:", companyNames);
 
