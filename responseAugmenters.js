@@ -129,10 +129,13 @@ class CompanyListAugmenter extends ResponseAugmenter {
 
         const companyNamesPromises = doc.sheetsByIndex.map(async (s) => {
             await s.loadHeaderRow();
+            console.debug("Sheet loaded:", s.title);
             return s.headerValues
                 .slice(1)
                 .filter((name) => !name.startsWith("-"));
         });
+
+        console.debug("Company names promises:", companyNamesPromises);
 
         const companyNames = await Promise.all(companyNamesPromises).then(
             (res) => [...new Set(res.flat())]
