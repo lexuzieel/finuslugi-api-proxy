@@ -108,6 +108,7 @@ class CompanyListAugmenter extends ResponseAugmenter {
         const cacheKey = createCacheKey("companies");
         const cached = await keyv.get(cacheKey);
         if (cached) {
+            console.log("Company list cache hit");
             return cached;
         }
 
@@ -116,7 +117,11 @@ class CompanyListAugmenter extends ResponseAugmenter {
             return company;
         });
 
+        console.log("Loading company list from google sheets...");
+
         const doc = await GoogleSheetsProvider.getInstance().getDocument();
+
+        console.log("Company list loaded");
 
         const companyNamesPromises = doc.sheetsByIndex.map(async (s) => {
             await s.loadHeaderRow();
