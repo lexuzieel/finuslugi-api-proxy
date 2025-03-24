@@ -143,18 +143,10 @@ class CompanyListAugmenter extends ResponseAugmenter {
             }
         }
 
-        // flatten and remove duplicates
+        // Flatten and remove duplicates
         companyNames = [...new Set(companyNames)].flat();
 
-        // console.debug("Company names promises:", companyNamesPromises);
-
-        // const companyNames = await Promise.all(companyNamesPromises).then(
-        //     (res) => [...new Set(res.flat())]
-        // );
-
         console.debug("Company names:", companyNames);
-
-        return originalCompanies;
 
         const mappedCompanyNames = companyNames.map((companyName) => ({
             id: findCompanyMapping(companyName),
