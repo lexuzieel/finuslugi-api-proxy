@@ -127,7 +127,7 @@ class CompanyListAugmenter extends ResponseAugmenter {
             "sheets"
         );
 
-        let companyNames = []
+        let companyNames = [];
 
         for (const sheet of doc.sheetsByIndex) {
             try {
@@ -183,7 +183,7 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
     }
 
     async augment(req, data) {
-        console.log("Augmenting preCalcPolicyPrice response");
+        // console.log("Augmenting preCalcPolicyPrice response");
 
         // Use FINUSLUGI_KV_THRESHOLD env variable to set kv threshold
         if (
@@ -194,7 +194,8 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
             data.partnerKvBonus = true;
         }
 
-        return { ...data, tildaExtra: await this.fetchExtra(req) };
+        const tildaExtra = await this.fetchExtra(req);
+        return { ...data, tildaExtra };
     }
 
     async fetchColumn(params) {
@@ -215,9 +216,13 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
 
         for (const sheet of sheets) {
             // Spread google API requests to avoid throttling
-            await new Promise((resolve) =>
-                setTimeout(resolve, 500 + Math.random() * 2500)
-            );
+            // console.time(`(${params.bankId}, ${params.companyId}): setTimeout`);
+            // await new Promise((resolve) =>
+            //     setTimeout(resolve, 500 + Math.random() * 500)
+            // );
+            // console.timeEnd(
+            //     `(${params.bankId}, ${params.companyId}): setTimeout`
+            // );
 
             const bankName = sheet.title;
             const bankId = findBankMapping(bankName);
@@ -227,7 +232,14 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
             }
 
             // Load header row to get company names
+
+            // console.time(
+            //     `(${params.bankId}, ${params.companyId}): sheet.loadHeaderRow`
+            // );
             await sheet.loadHeaderRow();
+            // console.timeEnd(
+            //     `(${params.bankId}, ${params.companyId}): sheet.loadHeaderRow`
+            // );
             const companyNames = sheet.headerValues.slice(1); // Skip first column
 
             for (const companyName of companyNames) {
@@ -244,7 +256,13 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                 if (columnIndex === -1) continue;
 
                 // Get all rows for this company's column
+                // console.time(
+                //     `(${params.bankId}, ${params.companyId}): sheet.getRows`
+                // );
                 const rows = await sheet.getRows();
+                // console.timeEnd(
+                //     `(${params.bankId}, ${params.companyId}): sheet.getRows`
+                // );
 
                 const addEntry = (acc, type, data) => {
                     if (!acc[type]) {
@@ -405,7 +423,7 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
                             predicate =
                                 predicate &&
                                 r.propertyWoodenFloor ===
-                                params.propertyWoodenFloor;
+                                    params.propertyWoodenFloor;
                         }
 
                         return predicate;
@@ -513,12 +531,24 @@ class ResponseAugmentationManager {
         ];
     }
 
-    async augmentResponse(req, axiosPromise) {
+    async augmentResponse(req, axiosPromise, cacheKey) {
         for (const augmenter of this.augmenters) {
             if (augmenter.canHandle(req.url)) {
                 try {
+                    if (cacheKey) {
+                        const cached = await keyv.get(cacheKey);
+                        if (cached) {
+                            return cached;
+                        }
+                    }
+
                     const response = await axiosPromise;
-                    return await augmenter.augment(req, response.data);
+                    const result = await augmenter.augment(req, response.data);
+                    if (cacheKey) {
+                        await keyv.set(cacheKey, result, ms("5s"));
+                    }
+
+                    return result;
                 } catch (error) {
                     if (augmenter.handleError) {
                         return await augmenter.handleError(req, error);

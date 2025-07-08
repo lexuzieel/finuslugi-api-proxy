@@ -118,17 +118,27 @@ app.all("*/api/*", async (req, res) => {
     };
 
     try {
-        const axiosPromise = axios({
+        const config = {
             method: req.method,
             url: apiEndpoint + url,
             headers,
             data: req.method == "POST" ? req.body : undefined,
-        });
+        };
 
+        const axiosPromise = axios(config);
+
+        const cacheKey = crypto
+            .createHash("sha1")
+            .update(JSON.stringify(config))
+            .digest("hex");
+
+        // console.time(`augmenting response (${url})`);
         const augmentedResponse = await responseAugmenter.augmentResponse(
             req,
-            axiosPromise
+            axiosPromise,
+            cacheKey
         );
+        // console.timeEnd(`augmenting response (${url})`);
 
         res.send(augmentedResponse);
     } catch (e) {
@@ -149,4 +159,3 @@ const server = app.listen(port, () => {
 const graceful = new Graceful({ servers: [server] });
 
 graceful.listen();
-
