@@ -458,6 +458,12 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
             return {
                 total,
                 partnerKv,
+                hasPropertyInsurance: _.some(
+                    aggregate,
+                    (r) => r.type === "property"
+                ),
+                hasLifeInsurance: _.some(aggregate, (r) => r.type === "life"),
+                hasTitleInsurance: _.some(aggregate, (r) => r.type === "title"),
             };
         } catch (error) {
             // console.error("Error getting sheet results:", error);
@@ -482,7 +488,13 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
             propertyWoodenFloor: req.body.form?.propertyWoodenFloor == true,
         };
 
-        const { total, partnerKv } = await this.resolvePrice(params);
+        const {
+            total,
+            partnerKv,
+            hasLifeInsurance,
+            hasPropertyInsurance,
+            hasTitleInsurance,
+        } = await this.resolvePrice(params);
 
         if (total == 0) {
             return {};
@@ -492,6 +504,9 @@ class PreCalcPolicyPriceAugmenter extends ResponseAugmenter {
             companyId,
             total,
             partnerKv,
+            hasLifeInsurance,
+            hasPropertyInsurance,
+            hasTitleInsurance,
         };
     }
 
